@@ -43,18 +43,18 @@ videoSeconds = round(frames / fps)
 partsSeconds = round(videoSeconds / args.split)
 partsTime = datetime.timedelta(seconds=partsSeconds)
 
-# create output dir if not exists
-if not os.path.isdir(args.outputDir):
-    os.makedirs(args.outputDir)
+odir = os.path.normpath(args.outputDir)
+
+os.makedirs(odir, exist_ok=True)
 
 # create and write the input text file for ffmpeg concat
-f = open(f"{args.outputDir}/list.txt", 'x')
+f = open(os.path.join(args.outputDir, "list.txt"), 'x')
 for i in range(args.split):
     f.write(f"file 'output{str(i).zfill(3)}.{args.fps}fps.mp4'\n")
 f.close()
 
 # write batch file
-f = open(f"{args.outputDir}/run.bat", 'x')
+f = open(os.path.join(args.outputDir, "run.bat"), 'x')
 f.write(
     f"ffmpeg -i \".{args.inputVideo.name}\" -c copy -map 0 -segment_time {partsTime} -f segment -reset_timestamps 1 output%%03d.mp4\n")
 
@@ -75,5 +75,5 @@ if args.shutdown:
 f.close()
 
 # execute batch file
-os.chdir(os.path.join(os.path.dirname(__file__), 'output'))
+os.chdir(odir)
 Popen('run.bat')
