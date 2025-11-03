@@ -91,7 +91,7 @@ for i in range(args.split):
         fork_pfx =  f"  start \"TASK {i+1}\" "
         fork_sfx = ""
     f.write(
-        f"  {fork_pfx} ffmpeg -i output{str(i).zfill(3)}.mkv -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mkv{fork_sfx}\n")
+        f"  {fork_pfx} ffmpeg -i output{str(i).zfill(3)}.mkv -map 0 -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mkv{fork_sfx}\n")
 
 if use_bash:
     f.writelines(map(lambda i: f"wait $ff_pid_{i};\n", range(args.split)))
