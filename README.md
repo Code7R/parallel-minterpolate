@@ -42,7 +42,8 @@ See the bottom of this document for the declaration of the reference variables
   ```bash
   pip3 install opencv-python
   ```
-- Only works with MP4 videos
+
+May use Bash or Batch/Powershell, depending on the environment.
 
 ## Installation
 
@@ -86,6 +87,8 @@ py parallel-minterpolate.py input.mp4 --split 5
 
 👆 Split the video `input.mp4` into `5` roughly equal chunks, apply the minterpolate filter to them, and join them back together.
 
+If the --split parameter is omited, the visible CPU core count is used to determine the number of threads.
+
 ```bash
 py parallel-minterpolate.py input.mp4 --split 5 --shutdown
 ```
@@ -96,7 +99,7 @@ py parallel-minterpolate.py input.mp4 --split 5 --shutdown
 
 After executing the Python script, with option `--split 5` for example, you should see `5` different command-line windows open, those are the parallel frame interpolation tasks. Do not close any of them and let them work.
 
-When it is finished, everything should auto close, and you should see the result as a `final.mp4` file inside an newly created `output` directory (this can be changed using the `-o` option).
+When it is finished, everything should auto close, and you should see the result as a `final.mkv` file inside an newly created `output` directory (this can be changed using the `-o` option).
 
 ## Contributing
 
