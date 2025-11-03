@@ -4,7 +4,7 @@
 import argparse
 import datetime
 import os
-from subprocess import Popen
+import subprocess
 # external
 import cv2
 
@@ -16,11 +16,13 @@ parser.add_argument('inputVideo',
 parser.add_argument('--split',
                     metavar='N',
                     type=int,
-                    required=True,
+                    required=False,
+                    default=os.cpu_count(),
                     help='number of tasks to generate equally')
 parser.add_argument('-o, --outputDir',
                     metavar='NAME',
                     default='output',
+                    dest="outputDir",
                     help='name of the output directory, default=\'output\'')
 parser.add_argument('--fps',
                     metavar='N',
@@ -29,9 +31,11 @@ parser.add_argument('--fps',
                     help='target FPS, default=60')
 parser.add_argument('--shutdown',
                     action='store_true',
-                    help='shutdown computer after tasks are completed')
+                    help='shutdown computer after tasks are completed (n/a in bash mode')
 
 args = parser.parse_args()
+
+dir(args)
 
 # create video capture object
 videoData = cv2.VideoCapture(args.inputVideo.name)
@@ -43,37 +47,70 @@ videoSeconds = round(frames / fps)
 partsSeconds = round(videoSeconds / args.split)
 partsTime = datetime.timedelta(seconds=partsSeconds)
 
-odir = os.path.normpath(args.outputDir)
+odir = os.path.abspath(os.path.normpath(args.outputDir))
 
 os.makedirs(odir, exist_ok=True)
 
 # create and write the input text file for ffmpeg concat
-f = open(os.path.join(args.outputDir, "list.txt"), 'x')
+f = open(os.path.join(odir, "list.txt"), 'w')
 for i in range(args.split):
-    f.write(f"file 'output{str(i).zfill(3)}.{args.fps}fps.mp4'\n")
+    f.write(f"file 'output{str(i).zfill(3)}.{args.fps}fps.mkv'\n")
 f.close()
 
+use_bash = False
+
+try:
+    result = subprocess.run(["bash", "--version"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    use_bash = ("GNU bash, " in result.stdout)
+except:
+    use_bash = False
+
+script = "run.sh" if use_bash else "run.bat"
+script_abs = os.path.join(odir, script)
+
 # write batch file
-f = open(os.path.join(args.outputDir, "run.bat"), 'x')
+f = open(script_abs, 'w')
+
+if use_bash:
+    f.write("#!/bin/bash\nset -ex\n")
+
 f.write(
-    f"ffmpeg -i \".{args.inputVideo.name}\" -c copy -map 0 -segment_time {partsTime} -f segment -reset_timestamps 1 output%%03d.mp4\n")
+    f"ffmpeg -i \"{args.inputVideo.name}\" -c copy -map 0 -segment_time {partsTime} -f segment -reset_timestamps 1 output%03d.mkv\n")
 
 # launch all ffmpeg tasks in parallel
 # continue only when everything is finished
-f.write('(\n')
+
+if not use_bash:
+    f.write('(\n')
+
 for i in range(args.split):
+    if use_bash:
+        fork_pfx = ""
+        fork_sfx = f"& ff_pid_{i}=$!\n"
+    else:
+        fork_pfx =  f"  start \"TASK {i+1}\" "
+        fork_sfx = ""
     f.write(
-        f"  start \"TASK {i+1}\" ffmpeg -i output{str(i).zfill(3)}.mp4 -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mp4\n")
-f.write(') | pause\n')
+        f"  {fork_pfx} ffmpeg -i output{str(i).zfill(3)}.mkv -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mkv{fork_sfx}\n")
 
-f.write('timeout /t 3 /nobreak > nul\n')
-f.write('ffmpeg -f concat -safe 0 -i list.txt -c copy final.mp4\n')
+if use_bash:
+    f.writelines(map(lambda i: f"wait $ff_pid_{i};\n", range(args.split)))
+else:
+    f.write(') | pause\n')
 
-if args.shutdown:
+if not use_bash:
+    f.write('timeout /t 3 /nobreak > nul\n')
+
+f.write('ffmpeg -f concat -safe 0 -i list.txt -c copy final.mkv\n')
+
+if args.shutdown and not use_bash:
     f.write('timeout /t 3 /nobreak > nul\n')
     f.write('shutdown /s /f /t 0\n')
 f.close()
 
 # execute batch file
 os.chdir(odir)
-Popen('run.bat')
+if use_bash:
+    subprocess.Popen(["bash", script_abs])
+else:
+    subprocess.Popen(script_abs)
