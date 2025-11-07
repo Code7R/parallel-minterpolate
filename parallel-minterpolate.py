@@ -32,7 +32,9 @@ parser.add_argument('--fps',
 parser.add_argument('--shutdown',
                     action='store_true',
                     help='shutdown computer after tasks are completed (n/a in bash mode')
-
+parser.add_argument('--autoname', "-A",
+                    action='store_true',
+                    help="Choose a name based in the input's filename (default: use final.mkv as filename)")
 args = parser.parse_args()
 
 dir(args)
@@ -58,6 +60,12 @@ for i in range(args.split):
 f.close()
 
 use_bash = False
+
+if args.autoname:
+    oname_stem, oname_ext = os.path.splitext(args.inputVideo.name)
+    oname = f"{oname_stem}{args.fps}fps{oname_ext}"
+else:
+    oname = "final.mkv"
 
 try:
     result = subprocess.run(["bash", "--version"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
@@ -101,7 +109,7 @@ else:
 if not use_bash:
     f.write('timeout /t 3 /nobreak > nul\n')
 
-f.write('ffmpeg -f concat -safe 0 -i list.txt -c copy final.mkv\n')
+f.write(f'ffmpeg -f concat -safe 0 -i list.txt -c copy {oname}\n')
 
 if args.shutdown and not use_bash:
     f.write('timeout /t 3 /nobreak > nul\n')
