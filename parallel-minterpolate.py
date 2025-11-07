@@ -80,7 +80,7 @@ script_abs = os.path.join(odir, script)
 f = open(script_abs, 'w')
 
 if use_bash:
-    f.write("#!/bin/bash\nset -ex\n")
+    f.write("#!/bin/sh -ex\n")
 
 f.write(
     f"ffmpeg -i \"{args.inputVideo.name}\" -c copy -map 0 -segment_time {partsTime} -f segment -reset_timestamps 1 output%03d.mkv\n")
