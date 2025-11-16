@@ -38,14 +38,22 @@ args = parser.parse_args()
 
 probeResult = subprocess.run(["ffprobe", args.inputVideo.name], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 probed = probeResult.stdout.splitlines() + probeResult.stderr.splitlines()
+ffmpeg = "ffmpeg -y"
+
+# minterpolate breaks on generic "-map 0" argument, working around it
+avmap = ""
+
 for l in probed:
     match=re.match(r".*Duration: (\d+):(\d+):(\d+)\.(\d+).*", l)
     if match:
         h, m, s, _ = match.groups()
         videoSeconds = int(h)*3600 + int(m)*60 + int(s)
-#    match=re.match(r"Stream.*#.*: Video:.*, ([.\d])+ fps.*", l)
-#    if match:
-#        fps = float(match.group(1))
+    match=re.match(r".*Stream #([.\d:]+).*: (Video|Audio).*", l)
+    if match:
+        avmap += " -map " + str(match.group(1))
+        #        fps = float(match.group(1))
+
+#exit(f"Dbg: {avmap}")
 
 # calculate duration of the split parts
 partsSeconds = round(videoSeconds / args.split)
@@ -77,7 +85,11 @@ try:
 except:
     use_bash = False
 
-script = "run.sh" if use_bash else "run.bat"
+if use_bash:
+    script = "run.sh"
+    ffmpeg = "nice -n18 " + ffmpeg
+else:
+    script = "run.bat"
 script_abs = os.path.join(odir, script)
 
 # write batch file
@@ -86,10 +98,10 @@ f = open(script_abs, 'w')
 if use_bash:
     f.write("#!/bin/sh -ex\n")
 
-f.write(
-    f"ffmpeg -i \"{ifile}\" -c copy -map 0 -segment_time {partsTime} -f segment -reset_timestamps 1 output%03d.mkv\n")
-
 f.write(f"cd \"{odir}\"\n")
+
+f.write(
+    f"{ffmpeg} -i \"{ifile}\" -c copy {avmap} -segment_time {partsTime} -f segment -reset_timestamps 1 output%03d.mkv\n")
 
 # launch all ffmpeg tasks in parallel
 # continue only when everything is finished
@@ -105,7 +117,7 @@ for i in range(args.split):
         fork_pfx =  f"  start \"TASK {i+1}\" "
         fork_sfx = ""
     f.write(
-        f"  {fork_pfx} ffmpeg -i output{str(i).zfill(3)}.mkv -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mkv{fork_sfx}\n")
+        f"  {fork_pfx} {ffmpeg} -i output{str(i).zfill(3)}.mkv {avmap} -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mkv{fork_sfx}\n")
 
 if use_bash:
     f.writelines(map(lambda i: f"wait $ff_pid_{i};\n", range(args.split)))
@@ -115,7 +127,7 @@ else:
 if not use_bash:
     f.write('timeout /t 3 /nobreak > nul\n')
 
-f.write(f'ffmpeg -f concat -safe 0 -i list.txt -c copy \"{oname}\"\n')
+f.write(f'{ffmpeg} -f concat -safe 0 -i list.txt -c copy -map 0 \"{oname}\"\n')
 
 if args.shutdown and not use_bash:
     f.write('timeout /t 3 /nobreak > nul\n')
