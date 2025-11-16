@@ -73,7 +73,7 @@ else:
 
 try:
     result = subprocess.run(["bash", "--version"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    use_bash = ("GNU bash, " in result.stdout)
+    use_bash = bool(result) and ("GNU bash, " in result.stdout)
 except:
     use_bash = False
 
