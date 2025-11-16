@@ -5,7 +5,7 @@ import argparse
 import datetime
 import os
 import subprocess
-import re
+import json
 
 parser = argparse.ArgumentParser(
     description='Parallelize video frame interpolation with FFmpeg.')
@@ -36,22 +36,21 @@ parser.add_argument('--autoname', "-A",
                     help="Choose a name based in the input's filename (default: use final.mkv as filename)")
 args = parser.parse_args()
 
-probeResult = subprocess.run(["ffprobe", args.inputVideo.name], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-probed = probeResult.stdout.splitlines() + probeResult.stderr.splitlines()
+probeResult = subprocess.run(["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", "-print_format", "json", args.inputVideo.name], stdout=subprocess.PIPE, text=True)
+probed = json.loads(probeResult.stdout)
+#print(repr(probed))
+
 ffmpeg = "ffmpeg -y"
 
 # minterpolate breaks on generic "-map 0" argument, working around it
 avmap = ""
 
-for l in probed:
-    match=re.match(r".*Duration: (\d+):(\d+):(\d+)\.(\d+).*", l)
-    if match:
-        h, m, s, _ = match.groups()
-        videoSeconds = int(h)*3600 + int(m)*60 + int(s)
-    match=re.match(r".*Stream #([.\d:]+).*: (Video|Audio).*", l)
-    if match:
-        avmap += " -map " + str(match.group(1))
-        #        fps = float(match.group(1))
+videoSeconds = float(probed['format']['duration'])
+
+for l in probed['streams']:
+    ct = l.get('codec_type', '')
+    if ct == 'audio' or ct == 'video':
+        avmap += " -map 0:" + str(l['index'])
 
 #exit(f"Dbg: {avmap}")
 
