@@ -5,8 +5,7 @@ import argparse
 import datetime
 import os
 import subprocess
-# external
-import cv2
+import re
 
 parser = argparse.ArgumentParser(
     description='Parallelize video frame interpolation with FFmpeg.')
@@ -37,14 +36,17 @@ parser.add_argument('--autoname', "-A",
                     help="Choose a name based in the input's filename (default: use final.mkv as filename)")
 args = parser.parse_args()
 
-dir(args)
+probeResult = subprocess.run(["ffprobe", args.inputVideo.name], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+probed = probeResult.stdout.splitlines() + probeResult.stderr.splitlines()
+for l in probed:
+    match=re.match(r".*Duration: (\d+):(\d+):(\d+)\.(\d+).*", l)
+    if match:
+        h, m, s, _ = match.groups()
+        videoSeconds = int(h)*3600 + int(m)*60 + int(s)
+#    match=re.match(r"Stream.*#.*: Video:.*, ([.\d])+ fps.*", l)
+#    if match:
+#        fps = float(match.group(1))
 
-# create video capture object
-videoData = cv2.VideoCapture(args.inputVideo.name)
-# count the number of frames
-frames = videoData.get(cv2.CAP_PROP_FRAME_COUNT)
-fps = videoData.get(cv2.CAP_PROP_FPS)
-videoSeconds = round(frames / fps)
 # calculate duration of the split parts
 partsSeconds = round(videoSeconds / args.split)
 partsTime = datetime.timedelta(seconds=partsSeconds)
@@ -52,6 +54,8 @@ partsTime = datetime.timedelta(seconds=partsSeconds)
 odir = os.path.abspath(os.path.normpath(args.outputDir))
 
 os.makedirs(odir, exist_ok=True)
+
+ifile = os.path.abspath(os.path.normpath(args.inputVideo.name))
 
 # create and write the input text file for ffmpeg concat
 f = open(os.path.join(odir, "list.txt"), 'w')
@@ -62,8 +66,8 @@ f.close()
 use_bash = False
 
 if args.autoname:
-    oname_stem, oname_ext = os.path.splitext(args.inputVideo.name)
-    oname = f"{oname_stem}{args.fps}fps{oname_ext}"
+    oname_stem, oname_ext = os.path.splitext(os.path.basename(args.inputVideo.name))
+    oname = f"{oname_stem}.{args.fps}fps{oname_ext}"
 else:
     oname = "final.mkv"
 
@@ -83,7 +87,9 @@ if use_bash:
     f.write("#!/bin/sh -ex\n")
 
 f.write(
-    f"ffmpeg -i \"{args.inputVideo.name}\" -c copy -map 0 -segment_time {partsTime} -f segment -reset_timestamps 1 output%03d.mkv\n")
+    f"ffmpeg -i \"{ifile}\" -c copy -map 0 -segment_time {partsTime} -f segment -reset_timestamps 1 output%03d.mkv\n")
+
+f.write(f"cd \"{odir}\"\n")
 
 # launch all ffmpeg tasks in parallel
 # continue only when everything is finished
@@ -99,7 +105,7 @@ for i in range(args.split):
         fork_pfx =  f"  start \"TASK {i+1}\" "
         fork_sfx = ""
     f.write(
-        f"  {fork_pfx} ffmpeg -i output{str(i).zfill(3)}.mkv -map 0 -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mkv{fork_sfx}\n")
+        f"  {fork_pfx} ffmpeg -i output{str(i).zfill(3)}.mkv -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mkv{fork_sfx}\n")
 
 if use_bash:
     f.writelines(map(lambda i: f"wait $ff_pid_{i};\n", range(args.split)))
@@ -109,7 +115,7 @@ else:
 if not use_bash:
     f.write('timeout /t 3 /nobreak > nul\n')
 
-f.write(f'ffmpeg -f concat -safe 0 -i list.txt -c copy {oname}\n')
+f.write(f'ffmpeg -f concat -safe 0 -i list.txt -c copy \"{oname}\"\n')
 
 if args.shutdown and not use_bash:
     f.write('timeout /t 3 /nobreak > nul\n')

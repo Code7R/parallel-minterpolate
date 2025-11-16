@@ -35,15 +35,10 @@ See the bottom of this document for the declaration of the reference variables
 
 ## Prerequisites
 
-- Windows only
-- FFmpeg
-- Python version 3.6+
-- Installed `opencv-python` dependency:
-  ```bash
-  pip3 install opencv-python
-  ```
+- recent FFmpeg (including ffprobe utility)
+- Python version 3.9+
 
-May use Bash or Batch/Powershell, depending on the environment.
+May use Bash or Batch/Powershell, depending on the environment. Bash is recommended (Git-Bash may be used on Windows).
 
 ## Installation
 
