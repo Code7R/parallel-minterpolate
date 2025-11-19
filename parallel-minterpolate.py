@@ -42,27 +42,33 @@ probed = json.loads(probeResult.stdout)
 
 ffmpeg = "ffmpeg -y"
 
-# minterpolate breaks on generic "-map 0" argument, working around it
-avmap = ""
+odir = os.path.abspath(os.path.normpath(args.outputDir))
+os.makedirs(odir, exist_ok=True)
+ifile = os.path.abspath(os.path.normpath(args.inputVideo.name))
 
 videoSeconds = float(probed['format']['duration'])
 
+input_subs = ''
+# minterpolate breaks with auto-detecting "-map 0" argument, therefore explicitly pick the subs in the end
+map_subs = ''
+map_audio = ''
+map_video = ''
+
 for l in probed['streams']:
     ct = l.get('codec_type', '')
-    if ct == 'audio' or ct == 'video':
-        avmap += " -map 0:" + str(l['index'])
-
-#exit(f"Dbg: {avmap}")
+    if ct == 'audio' and not map_audio:
+        map_audio = '-map 0:a'
+    elif ct == 'video' and not map_video:
+        map_audio = '-map 0:v'
+    elif ct == 'subtitle' and not input_subs:
+        input_subs = f'-i "{ifile}"'
+        map_subs = f'-map 1:s'
+    if map_video and map_audio and map_subs:
+        break
 
 # calculate duration of the split parts
 partsSeconds = round(videoSeconds / args.split)
 partsTime = datetime.timedelta(seconds=partsSeconds)
-
-odir = os.path.abspath(os.path.normpath(args.outputDir))
-
-os.makedirs(odir, exist_ok=True)
-
-ifile = os.path.abspath(os.path.normpath(args.inputVideo.name))
 
 # create and write the input text file for ffmpeg concat
 f = open(os.path.join(odir, "list.txt"), 'w')
@@ -100,7 +106,7 @@ if use_bash:
 f.write(f"cd \"{odir}\"\n")
 
 f.write(
-    f"{ffmpeg} -i \"{ifile}\" -c copy {avmap} -segment_time {partsTime} -f segment -reset_timestamps 1 output%03d.mkv\n")
+    f"{ffmpeg} -i \"{ifile}\" -c copy {map_video} {map_audio} -segment_time {partsTime} -f segment -reset_timestamps 1 output%03d.mkv\n")
 
 # launch all ffmpeg tasks in parallel
 # continue only when everything is finished
@@ -116,7 +122,7 @@ for i in range(args.split):
         fork_pfx =  f"  start \"TASK {i+1}\" "
         fork_sfx = ""
     f.write(
-        f"  {fork_pfx} {ffmpeg} -i output{str(i).zfill(3)}.mkv {avmap} -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mkv{fork_sfx}\n")
+        f"  {fork_pfx} {ffmpeg} -i output{str(i).zfill(3)}.mkv {map_video} {map_audio} -crf 10 -vf \"minterpolate=fps={args.fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1\" output{str(i).zfill(3)}.{args.fps}fps.mkv{fork_sfx}\n")
 
 if use_bash:
     f.writelines(map(lambda i: f"wait $ff_pid_{i};\n", range(args.split)))
@@ -126,7 +132,7 @@ else:
 if not use_bash:
     f.write('timeout /t 3 /nobreak > nul\n')
 
-f.write(f'{ffmpeg} -f concat -safe 0 -i list.txt -c copy -map 0 \"{oname}\"\n')
+f.write(f'{ffmpeg} -f concat -safe 0 -i list.txt {input_subs} -c copy {map_video} {map_audio} {map_subs} \"{oname}\"\n')
 
 if args.shutdown and not use_bash:
     f.write('timeout /t 3 /nobreak > nul\n')
