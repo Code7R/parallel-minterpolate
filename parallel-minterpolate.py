@@ -56,13 +56,14 @@ map_video = ''
 
 for l in probed['streams']:
     ct = l.get('codec_type', '')
+    #print(f"ct: {ct}")
     if ct == 'audio' and not map_audio:
         map_audio = '-map 0:a'
     elif ct == 'video' and not map_video:
-        map_audio = '-map 0:v'
+        map_video = '-map 0:v'
     elif ct == 'subtitle' and not input_subs:
         input_subs = f'-i "{ifile}"'
-        map_subs = f'-map 1:s'
+        map_subs = '-map 1:s'
     if map_video and map_audio and map_subs:
         break
 
