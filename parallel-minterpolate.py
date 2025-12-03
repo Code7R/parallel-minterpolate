@@ -13,8 +13,10 @@ try:
     result = subprocess.run(["bash", "--version"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     use_bash = bool(result) and ("GNU bash, " in result.stdout)
     ffmpeg = "nice -n18 " + ffmpeg
+    script = "run.sh"
 except:
     use_bash = False
+    script = "run.bat"
 
 parser = argparse.ArgumentParser(
     description='Parallelize video frame interpolation with FFmpeg.')
@@ -97,8 +99,6 @@ if args.autoname:
     oname = f"{oname_stem}.{args.fps}fps{oname_ext}"
 else:
     oname = "final.mkv"
-
-script = "run.sh" if use_bash else "run.bat"
 
 script_abs = os.path.join(odir, script)
 
